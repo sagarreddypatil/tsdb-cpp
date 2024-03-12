@@ -2,79 +2,48 @@
 #include <filesystem>
 #include <vector>
 #include <map>
-#include <unordered_map>
 
 #include "fmapvec.hpp"
-#include <stdint.h>
+#include "database.hpp"
 
-template<typename T>
-class Database {
-    std::string loc;
 
-public:
-    struct Entry {
-        uint64_t timestamp;
-        T data;
+int bruh() {
+    struct datapoint {
+        uint64_t c;
+        int64_t v;
     };
 
-    std::unordered_map<std::string, std::shared_ptr<FileMappedVector<Entry>>> tables;
+    size_t npts = 500000000;
+    Table<datapoint> vec("test.dat");
 
-    Database(std::string loc) : loc(loc) {
-        // loc names a folder, create if doesn't exist
-
-        if(!std::filesystem::exists(loc)) {
-            std::filesystem::create_directory(loc);
-        }
-
-        // each file is a table
-        for (const auto & entry : std::filesystem::directory_iterator(loc)) {
-            std::string table_name = entry.path().filename().string();
-            tables[table_name] = std::make_shared<FileMappedVector<Entry>>(entry.path().string());
-        }
-    }
-
-    void make_table(std::string name) {
-        if (tables.find(name) != tables.end()) {
-            std::cerr << "Error: table " << name << " already exists" << std::endl;
-            return;
-        }
-
-        tables[name] = std::make_shared<FileMappedVector<Entry>>(loc + "/" + name);
-    }
-
-    std::shared_ptr<FileMappedVector<Entry>> get_table(std::string name) {
-        if (tables.find(name) == tables.end()) {
-            std::cerr << "Error: table " << name << " does not exist" << std::endl;
-            return nullptr;
-        }
-
-        return tables[name];
-    }
-
-};
-
-int main(int argc, char* argv[]) {
-    // std::vector<std::string> args(argv + 1, argc + argv);
-    // std::map<std::string, std::string> options;
-
-    // for (uint i = 0; i < args.size(); i++) {
-    //     if (args[i].substr(0, 2) == "--") {
-    //         if (i + 1 >= args.size()) {
-    //             std::cerr << "Error: option " << args[i] << " requires an argument" << std::endl;
-    //             return 1;
-    //         }
-
-    //         options[args[i].substr(2)] = args[i + 1];
-    //         i++;
-    //     }
+    // for(uint i = 0; i < (uint)npts; i++) {
+    //     vec.append(i, {i, rand()});
     // }
 
-    struct datapoint {
-        int x;
-        int y;
-    };
+    // generate a list of 1000 random numbers between 0 and npts
+    std::vector<size_t> randoms;
+    for(int i = 0; i < 5000000; i++) {
+        randoms.push_back(rand() % npts);
+    }
 
-    Database<datapoint> db("db");
-    db.make_table("test");
-    db.get_table("test")->append({1, 2});
+    volatile size_t index;
+
+    // search for the random indices
+    for(int idx : randoms) {
+        index = vec.locate(idx);
+    }
+
+    return index;
+
+    // sleep(10);
+
+
+    // Database<datapoint> db("db");
+    // db.make_table("test");
+    // db.get_table("test")->append({1, 2});
+}
+
+int main() {
+    bruh();
+    return 0;
 }

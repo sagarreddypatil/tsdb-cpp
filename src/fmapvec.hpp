@@ -1,3 +1,5 @@
+#pragma once
+
 #include <unistd.h>
 #include <sys/stat.h>
 #include <sys/types.h>
@@ -7,7 +9,7 @@
 
 template<typename T>
 class FileMappedVector {
-    size_t size;
+    size_t _size;
     size_t capacity;
 
     const char* sentinel_magic = "FMAPVEC";
@@ -70,7 +72,7 @@ class FileMappedVector {
             memcpy(last->sent.magic, sentinel_magic, 8);
         }
 
-        size = last->sent.used_size;
+        _size = last->sent.used_size;
     };
 
     ~FileMappedVector() {
@@ -79,8 +81,8 @@ class FileMappedVector {
         close(fd);
     };
 
-    void append(T new_elem) {
-        if (size >= capacity - 1) {
+    void append(const T& new_elem) {
+        if (_size >= capacity - 1) {
             // resize
             auto new_capacity = capacity * 2;
 
@@ -90,9 +92,10 @@ class FileMappedVector {
             // ftrunc
             ftruncate(fd, new_capacity * sizeof(elem));
 
+            int flags = MAP_SHARED;
 
             // remap
-            data = (elem*)mmap(NULL, new_capacity * sizeof(elem), PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
+            data = (elem*)mmap(NULL, new_capacity * sizeof(elem), PROT_READ | PROT_WRITE, flags, fd, 0);
             if (data == MAP_FAILED) {
                 std::cerr << "Error: could not remap file to memory" << std::endl;
                 return;
@@ -103,23 +106,27 @@ class FileMappedVector {
             // update sentinel
             elem* last = &data[capacity - 1];
             memcpy(last->sent.magic, sentinel_magic, 8);
-            last->sent.used_size = size;
+            last->sent.used_size = _size;
         }
 
-        data[size].data = new_elem;
-        size++;
+        data[_size].data = new_elem;
+        _size++;
 
         // update sentinel
         elem* last = &data[capacity - 1];
-        last->sent.used_size = size;
+        last->sent.used_size = _size;
     };
 
     T operator[](size_t i) {
-        if (i >= size) {
+        if (i >= _size) {
             std::cerr << "Error: index out of bounds" << std::endl;
             return T();
         }
 
         return data[i].data;
+    };
+
+    size_t size() {
+        return _size;
     };
 };
