@@ -3,19 +3,38 @@
 #include "database.hpp"
 #include <cstdint>
 
-struct SensorNetPoint {
-    uint64_t counter;
-    int64_t value;
+struct DataPoint {
+    int a;
+    int b;
 };
 
-void app(tsdb::Database<SensorNetPoint> db) {
-    // create UDP socket
-    // bind to port 1111
-    // receive data
+static const size_t npts = 100000000;
 
-    
+void insertPoints() {
+    tsdb::Database db("db");
+    auto table = db.get_table<DataPoint>("mytable");
+
+    for (int i = 0; i < (int)npts; i++) {
+        table->append(i, {i * 2, i * 3});
+    }
+
+    db.sync();
+}
+
+void reducePoints() {
+    tsdb::Database db("db");
+    auto table = db.get_table<DataPoint>("mytable");
+
+    auto reduced = table->reduce(0, npts, 10000);
+
+    for (auto& entry : reduced) {
+        std::cout << entry.timestamp << " " << entry.value.a << " " << entry.value.b << std::endl;
+    }
+
 }
 
 int main() {
-    tsdb::Database<SensorNetPoint> db("db");
+    // insertPoints();
+    reducePoints();
+    return 0;
 }

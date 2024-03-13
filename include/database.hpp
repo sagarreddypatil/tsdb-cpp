@@ -145,8 +145,13 @@ class FileMappedVector {
     };
 };
 
+class AbstractTable {
+public:
+    virtual void sync() = 0;
+};
+
 template<typename T>
-class Table {
+class Table : public AbstractTable {
 public:
     struct Entry {
         uint64_t timestamp;
@@ -163,7 +168,7 @@ public:
 
     void append(uint64_t timestamp, const T& value) {
         // timestamp must be strictly increasing
-        if (timestamp <= data->operator[](data->size() - 1).timestamp) {
+        if (data->size() > 0 && timestamp <= data->operator[](data->size() - 1).timestamp) {
             return;
         }
 
@@ -234,12 +239,15 @@ private:
     }
 };
 
-template<typename T>
 class Database {
     std::string loc;
 
+    std::string table_loc(std::string name) {
+        return loc + "/" + name;
+    }
+
 public:
-    std::unordered_map<std::string, Table<T>> tables;
+    std::unordered_map<std::string, std::shared_ptr<AbstractTable>> tables;
 
     Database(std::string loc) : loc(loc) {
         // loc names a folder, create if doesn't exist
@@ -247,34 +255,20 @@ public:
         if(!std::filesystem::exists(loc)) {
             std::filesystem::create_directory(loc);
         }
-
-        // each file is a table
-        for (const auto & entry : std::filesystem::directory_iterator(loc)) {
-            std::string table_name = entry.path().filename().string();
-            tables[table_name] = Table<T>(entry.path().string());
-        }
     }
 
-    void make_table(std::string name) {
-        if (tables.find(name) != tables.end()) {
-            return;
-        }
-
-        tables[name] = Table<T>(loc + "/" + name);
-    }
-
-    Table<T> get_table(std::string name) {
+    template<typename T>
+    std::shared_ptr<Table<T>> get_table(std::string name) {
         if (tables.find(name) == tables.end()) {
-            std::cerr << "Error: table " << name << " does not exist" << std::endl;
-            return nullptr;
+            tables[name] = std::make_shared<Table<T>>(loc + "/" + name);
         }
 
-        return tables[name];
+        return std::dynamic_pointer_cast<Table<T>>(tables[name]);
     }
 
     void sync() {
         for (auto& [name, table] : tables) {
-            table.sync();
+            table->sync();
         }
     }
 };
