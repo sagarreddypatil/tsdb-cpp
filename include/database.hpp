@@ -139,6 +139,10 @@ class FileMappedVector {
     size_t size() {
         return _size;
     };
+
+    void sync() {
+        msync(data, capacity * sizeof(elem), MS_SYNC);
+    };
 };
 
 template<typename T>
@@ -153,12 +157,16 @@ private:
     std::shared_ptr<FileMappedVector<Entry>> data;
 
 public:
-
     Table(std::string loc) {
         data = std::make_shared<FileMappedVector<Entry>>(loc);
     }
 
     void append(uint64_t timestamp, const T& value) {
+        // timestamp must be strictly increasing
+        if (timestamp <= data->operator[](data->size() - 1).timestamp) {
+            return;
+        }
+
         data->append({timestamp, value});
     }
 
@@ -200,6 +208,10 @@ public:
         }
 
         return reduced;
+    }
+
+    void sync() {
+        data->sync();
     }
 
 private:
@@ -245,7 +257,6 @@ public:
 
     void make_table(std::string name) {
         if (tables.find(name) != tables.end()) {
-            std::cerr << "Error: table " << name << " already exists" << std::endl;
             return;
         }
 
@@ -261,6 +272,11 @@ public:
         return tables[name];
     }
 
+    void sync() {
+        for (auto& [name, table] : tables) {
+            table.sync();
+        }
+    }
 };
 
 } // namespace tsdb

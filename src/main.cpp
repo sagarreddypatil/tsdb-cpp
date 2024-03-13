@@ -1,33 +1,21 @@
 #include <iostream>
 
 #include "database.hpp"
+#include <cstdint>
 
+struct SensorNetPoint {
+    uint64_t counter;
+    int64_t value;
+};
 
-int bruh() {
-    struct datapoint {
-        uint64_t c;
-        int64_t v;
-    };
+void app(tsdb::Database<SensorNetPoint> db) {
+    // create UDP socket
+    // bind to port 1111
+    // receive data
 
-    size_t npts = 500000000;
-    tsdb::Table<datapoint> vec("test.dat");
-
-    // for(uint i = 0; i < (uint)npts; i++) {
-    //     vec.append(i, {i, rand()});
-    // }
-
-    // auto reduced = vec.reduce(0, npts, 10000);
-
-    // print to csv
-    std::cout << "time,counter,value" << "\n";
-    for (size_t i = 0; i < npts; i++) {
-        std::cout << vec[i].timestamp << "," << vec[i].value.c << "," << vec[i].value.v << "\n";
-    }
-
-    return npts;
+    
 }
 
 int main() {
-    bruh();
-    return 0;
+    tsdb::Database<SensorNetPoint> db("db");
 }
