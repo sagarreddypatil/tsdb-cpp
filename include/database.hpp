@@ -1,14 +1,21 @@
 #pragma once
 
+extern "C" {
 #include <unistd.h>
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <sys/mman.h>
 #include <string.h>
 #include <fcntl.h>
+#include <stdint.h>
+}
 
 #include <functional>
 #include <unordered_map>
+#include <memory>
+#include <filesystem>
+
+namespace tsdb {
 
 template<typename T>
 class FileMappedVector {
@@ -255,3 +262,5 @@ public:
     }
 
 };
+
+} // namespace tsdb
