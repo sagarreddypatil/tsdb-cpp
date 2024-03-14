@@ -127,12 +127,13 @@ class FileMappedVector {
         last->sent.used_size = _size;
     };
 
-    T operator[](size_t i) {
-        if (i >= _size) {
-            std::cerr << "Error: index out of bounds" << std::endl;
-            return T();
-        }
+    T* get(size_t i) {
+        // don't bounds check
+        // return &data[i].data;
+        return (T*)(data + i);
+    }
 
+    T operator[](size_t i) {
         return data[i].data;
     };
 
@@ -175,8 +176,12 @@ public:
         data->append({timestamp, value});
     }
 
+    Entry* get(size_t idx) {
+        return data->get(idx);
+    }
+
     Entry operator[](size_t idx) {
-        return data->operator[](idx);
+        return *get(idx);
     }
 
     size_t size() {
@@ -187,11 +192,11 @@ public:
         // tail optimized binary search
         // we know that the data is sorted by timestamp
 
-        if(timestamp <= data->operator[](0).timestamp) {
+        if(timestamp <= data->get(0)->timestamp) {
             return 0;
         }
 
-        if(timestamp >= data->operator[](data->size() - 1).timestamp) {
+        if(timestamp >= data->get(data->size() - 1)->timestamp) {
             return data->size() - 1;
         }
 
@@ -204,12 +209,28 @@ public:
         size_t end = locate(t_end) + 1;
         end = std::min(end, size());
 
-
         std::vector<Entry> reduced;
-        for (size_t i = start; i < end; i++) {
-            if (!reduced.size() || reduced.back().timestamp + dt <= data->operator[](i).timestamp) {
-                reduced.push_back(data->operator[](i));
+        reduced.push_back(data->operator[](start));
+
+        uint64_t threshold = reduced.back().timestamp + dt;
+
+        for (size_t i = start + 1; i < end; i++) {
+            auto entry = data->get(i);
+
+            if (threshold <= entry->timestamp) {
+                threshold = entry->timestamp + dt;
+                reduced.push_back(*entry);
             }
+
+            // estimate next index of timestamp
+            uint32_t dataDt = (uint32_t)(entry->timestamp - data->get(i - 1)->timestamp);
+            // downcast divide for speed
+            auto n = (uint32_t)(dt) / dataDt;
+            n = std::max(n, (uint32_t)1);
+            i += n - 1; // -1 because of the loop increment
+
+            // next timestamp will be at least n indices away, so we can skip
+            // checking those
         }
 
         return reduced;
@@ -227,11 +248,11 @@ private:
 
         size_t mid = (start + end) / 2;
 
-        if (data->operator[](mid).timestamp >= timestamp && data->operator[](mid - 1).timestamp < timestamp) {
+        if (data->get(mid)->timestamp >= timestamp && data->get(mid - 1)->timestamp < timestamp) {
             return mid;
         }
 
-        if (data->operator[](mid).timestamp < timestamp) {
+        if (data->get(mid)->timestamp < timestamp) {
             return _locate(timestamp, mid + 1, end);
         }
 

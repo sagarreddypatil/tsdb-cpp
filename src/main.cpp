@@ -25,12 +25,13 @@ void reducePoints() {
     tsdb::Database db("db");
     auto table = db.get_table<DataPoint>("mytable");
 
-    auto reduced = table->reduce(0, npts, 10000);
+    auto reduced = table->reduce(0, npts, 1000);
 
-    for (auto& entry : reduced) {
-        std::cout << entry.timestamp << " " << entry.value.a << " " << entry.value.b << std::endl;
-    }
+    // for (auto& entry : reduced) {
+    //     std::cout << entry.timestamp << " " << entry.value.a << " " << entry.value.b << std::endl;
+    // }
 
+    std::cout << reduced.size() << std::endl;
 }
 
 int main() {
