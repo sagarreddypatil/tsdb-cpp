@@ -161,18 +161,23 @@ public:
 
 private:
     std::shared_ptr<FileMappedVector<Entry>> data;
+    uint64_t last_timestamp = 0;
 
 public:
     Table(std::string loc) {
         data = std::make_shared<FileMappedVector<Entry>>(loc);
+        if(data->size() > 0) {
+            last_timestamp = data->get(data->size() - 1)->timestamp;
+        }
     }
 
-    void append(uint64_t timestamp, const T& value) {
+    void append(const uint64_t& timestamp, const T& value) {
         // timestamp must be strictly increasing
-        if (data->size() > 0 && timestamp <= data->operator[](data->size() - 1).timestamp) {
+        if (data->size() > 0 && timestamp <= last_timestamp) {
             return;
         }
 
+        last_timestamp = timestamp;
         data->append({timestamp, value});
     }
 
@@ -231,6 +236,8 @@ public:
 
             // next timestamp will be at least n indices away, so we can skip
             // checking those
+
+            // assumption: rate of data doesn't get drastically faster
         }
 
         return reduced;

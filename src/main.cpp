@@ -21,17 +21,19 @@ void insertPoints() {
     db.sync();
 }
 
-void reducePoints() {
+size_t reducePoints() {
     tsdb::Database db("db");
     auto table = db.get_table<DataPoint>("mytable");
 
-    auto reduced = table->reduce(0, npts, 1000);
+    auto reduced = table->reduce(0, npts, 10);
 
     // for (auto& entry : reduced) {
     //     std::cout << entry.timestamp << " " << entry.value.a << " " << entry.value.b << std::endl;
     // }
 
-    std::cout << reduced.size() << std::endl;
+    // std::cout << reduced.size() << std::endl;
+
+    return reduced.size();
 }
 
 int main() {
