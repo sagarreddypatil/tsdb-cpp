@@ -159,23 +159,19 @@ public:
     };
 
 private:
-    std::shared_ptr<FileMappedVector<uint64_t>> timestamps;
     std::shared_ptr<FileMappedVector<Entry>> data;
 
 public:
     Table(std::string loc) {
-        timestamps = std::make_shared<FileMappedVector<uint64_t>>(loc + "_timestamps");
         data = std::make_shared<FileMappedVector<Entry>>(loc);
     }
 
     void append(uint64_t timestamp, const T& value) {
         // timestamp must be strictly increasing
-
-        if(timestamps->size() > 0 && timestamp <= timestamps->operator[](timestamps->size() - 1)) {
+        if (data->size() > 0 && timestamp <= data->operator[](data->size() - 1).timestamp) {
             return;
         }
 
-        timestamps->append(timestamp);
         data->append({timestamp, value});
     }
 
@@ -191,11 +187,11 @@ public:
         // tail optimized binary search
         // we know that the data is sorted by timestamp
 
-        if(timestamp <= timestamps->operator[](0)) {
+        if(timestamp <= data->operator[](0).timestamp) {
             return 0;
         }
 
-        if(timestamp >= timestamps->operator[](data->size() - 1)) {
+        if(timestamp >= data->operator[](data->size() - 1).timestamp) {
             return data->size() - 1;
         }
 
@@ -211,7 +207,7 @@ public:
 
         std::vector<Entry> reduced;
         for (size_t i = start; i < end; i++) {
-            if(!reduced.size() || reduced.back().timestamp + dt <= timestamps->operator[](i)) {
+            if (!reduced.size() || reduced.back().timestamp + dt <= data->operator[](i).timestamp) {
                 reduced.push_back(data->operator[](i));
             }
         }
@@ -231,11 +227,11 @@ private:
 
         size_t mid = (start + end) / 2;
 
-        if(timestamps->operator[](mid) >= timestamp && timestamps->operator[](mid - 1) < timestamp) {
+        if (data->operator[](mid).timestamp >= timestamp && data->operator[](mid - 1).timestamp < timestamp) {
             return mid;
         }
 
-        if(timestamps->operator[](mid) < timestamp) {
+        if (data->operator[](mid).timestamp < timestamp) {
             return _locate(timestamp, mid + 1, end);
         }
 
