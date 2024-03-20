@@ -25,19 +25,37 @@ size_t reducePoints() {
     tsdb::Database db("db");
     auto table = db.get_table<DataPoint>("mytable");
 
-    auto reduced = table->reduce(0, npts, 10);
+    auto reduced = table->reduce(0, npts, 100);
 
     // for (auto& entry : reduced) {
     //     std::cout << entry.timestamp << " " << entry.value.a << " " << entry.value.b << std::endl;
     // }
 
-    // std::cout << reduced.size() << std::endl;
+    std::cout << reduced.size() << std::endl;
 
     return reduced.size();
 }
 
+size_t benchLocate() {
+    static volatile size_t p;
+
+    tsdb::Database db("db");
+    auto table = db.get_table<DataPoint>("mytable");
+
+    std::vector<uint64_t> rand_ts;
+    for (int i = 0; i < 1000000; i++)
+        rand_ts.push_back(rand() % npts);
+
+    for (auto ts : rand_ts) {
+        p = table->locate(ts);
+    }
+
+    return p;
+}
+
 int main() {
     // insertPoints();
-    reducePoints();
+    // reducePoints();
+    benchLocate();
     return 0;
 }

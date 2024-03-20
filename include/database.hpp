@@ -222,6 +222,7 @@ public:
         for (size_t i = start + 1; i < end; i++) {
             auto entry = data->get(i);
 
+            // TODO: here
             if (threshold <= entry->timestamp) {
                 threshold = entry->timestamp + dt;
                 reduced.push_back(*entry);
@@ -233,6 +234,9 @@ public:
             auto n = (uint32_t)(dt) / dataDt;
             n = std::max(n, (uint32_t)1);
             i += n - 1; // -1 because of the loop increment
+
+            // if(__builtin_expect(i + 1 < end, 1))
+            // __builtin_prefetch(data->get(i + 1));
 
             // next timestamp will be at least n indices away, so we can skip
             // checking those
@@ -249,19 +253,24 @@ public:
 
 private:
     size_t _locate(uint64_t timestamp, size_t start, size_t end) {
-        if (start == end) {
+        if (__builtin_expect(start == end, 0))
             return start;
-        }
 
-        size_t mid = (start + end) / 2;
+        const size_t mid = (start + end) >> 1;
+        const size_t nmid_l = (start + mid) >> 1;
+        const size_t nmid_r = (mid + 1 + end) >> 1;
 
-        if (data->get(mid)->timestamp >= timestamp && data->get(mid - 1)->timestamp < timestamp) {
+        __builtin_prefetch(data->get(nmid_l));
+        __builtin_prefetch(data->get(nmid_r));
+
+        const uint64_t mts = data->get(mid)->timestamp;
+        const uint64_t prevts = data->get(mid - 1)->timestamp;
+
+        if (mts >= timestamp && prevts < timestamp)
             return mid;
-        }
 
-        if (data->get(mid)->timestamp < timestamp) {
+        if (mts < timestamp)
             return _locate(timestamp, mid + 1, end);
-        }
 
         return _locate(timestamp, start, mid);
     }
