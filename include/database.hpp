@@ -17,6 +17,8 @@ extern "C" {
 
 namespace tsdb {
 
+static const size_t pagesize = getpagesize();
+
 template<typename T>
 class FileMappedVector {
     size_t _size;
@@ -83,6 +85,7 @@ class FileMappedVector {
         }
 
         _size = last->sent.used_size;
+        madvise(data, _size * sizeof(elem), MADV_RANDOM);
     };
 
     ~FileMappedVector() {
@@ -110,6 +113,11 @@ class FileMappedVector {
                 std::cerr << "Error: could not remap file to memory" << std::endl;
                 return;
             }
+
+            // madvise(data, _size * sizeof(elem), MADV_RANDOM);
+            // round data + _size to next page boundary
+            // void* free_start = (void*)(((size_t)(data + _size) + pagesize - 1) & ~(pagesize - 1));
+            // madvise(free_start, (new_capacity - _size) * sizeof(elem), MADV_SEQUENTIAL);
 
             capacity = new_capacity;
 
@@ -221,19 +229,20 @@ public:
 
         for (size_t i = start + 1; i < end; i++) {
             auto entry = data->get(i);
+            __builtin_prefetch(entry + 1);
 
             // TODO: here
-            if (threshold <= entry->timestamp) {
+            if(entry->timestamp >= threshold) {
                 threshold = entry->timestamp + dt;
                 reduced.push_back(*entry);
             }
 
             // estimate next index of timestamp
-            uint32_t dataDt = (uint32_t)(entry->timestamp - data->get(i - 1)->timestamp);
+            // uint32_t dataDt = (uint32_t)(entry->timestamp - data->get(i - 1)->timestamp);
             // downcast divide for speed
-            auto n = (uint32_t)(dt) / dataDt;
-            n = std::max(n, (uint32_t)1);
-            i += n - 1; // -1 because of the loop increment
+            // auto n = (uint32_t)(dt) / dataDt;
+            // n = std::max(n, (uint32_t)1);
+            // i += n - 1; // -1 because of the loop increment
 
             // if(__builtin_expect(i + 1 < end, 1))
             // __builtin_prefetch(data->get(i + 1));

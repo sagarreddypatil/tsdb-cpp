@@ -55,7 +55,7 @@ size_t benchLocate() {
 
 int main() {
     // insertPoints();
-    // reducePoints();
-    benchLocate();
+    reducePoints();
+    // benchLocate();
     return 0;
 }
