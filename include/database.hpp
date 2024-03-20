@@ -229,10 +229,9 @@ public:
 
         for (size_t i = start + 1; i < end; i++) {
             auto entry = data->get(i);
-            __builtin_prefetch(entry + 1);
 
             // TODO: here
-            if(entry->timestamp >= threshold) {
+            if(__builtin_expect(entry->timestamp >= threshold, 0)) {
                 threshold = entry->timestamp + dt;
                 reduced.push_back(*entry);
             }
