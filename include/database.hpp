@@ -85,6 +85,8 @@ class FileMappedVector {
         }
 
         _size = last->sent.used_size;
+
+        // advise random
         madvise(data, _size * sizeof(elem), MADV_RANDOM);
     };
 
@@ -114,10 +116,8 @@ class FileMappedVector {
                 return;
             }
 
-            // madvise(data, _size * sizeof(elem), MADV_RANDOM);
-            // round data + _size to next page boundary
-            // void* free_start = (void*)(((size_t)(data + _size) + pagesize - 1) & ~(pagesize - 1));
-            // madvise(free_start, (new_capacity - _size) * sizeof(elem), MADV_SEQUENTIAL);
+            // advise the whole thing as random
+            madvise(data, new_capacity * sizeof(elem), MADV_RANDOM);
 
             capacity = new_capacity;
 
@@ -150,7 +150,7 @@ class FileMappedVector {
     };
 
     void sync() {
-        msync(data, capacity * sizeof(elem), MS_SYNC);
+        msync(data, capacity * sizeof(elem), MS_ASYNC);
     };
 };
 
@@ -230,21 +230,10 @@ public:
         for (size_t i = start + 1; i < end; i++) {
             auto entry = data->get(i);
 
-            // TODO: here
-            if(__builtin_expect(entry->timestamp >= threshold, 0)) {
+            if (entry->timestamp > threshold) {
                 threshold = entry->timestamp + dt;
                 reduced.push_back(*entry);
             }
-
-            // estimate next index of timestamp
-            // uint32_t dataDt = (uint32_t)(entry->timestamp - data->get(i - 1)->timestamp);
-            // downcast divide for speed
-            // auto n = (uint32_t)(dt) / dataDt;
-            // n = std::max(n, (uint32_t)1);
-            // i += n - 1; // -1 because of the loop increment
-
-            // if(__builtin_expect(i + 1 < end, 1))
-            // __builtin_prefetch(data->get(i + 1));
 
             // next timestamp will be at least n indices away, so we can skip
             // checking those

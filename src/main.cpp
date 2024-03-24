@@ -25,7 +25,7 @@ size_t reducePoints() {
     tsdb::Database db("db");
     auto table = db.get_table<DataPoint>("mytable");
 
-    auto reduced = table->reduce(0, npts, 100);
+    auto reduced = table->reduce(0, npts, 0);
 
     // for (auto& entry : reduced) {
     //     std::cout << entry.timestamp << " " << entry.value.a << " " << entry.value.b << std::endl;
@@ -53,9 +53,25 @@ size_t benchLocate() {
     return p;
 }
 
+tsdb::Table<DataPoint>::Entry entry;
+
+size_t benchRead() {
+    tsdb::Database db("db");
+    auto table = db.get_table<DataPoint>("mytable");
+
+    for(int i = 0; i < 50; i++) {
+        for (size_t i = 0; i < npts; i++) {
+            entry = *(table->get(i));
+        }
+    }
+
+    return npts;
+}
+
 int main() {
-    // insertPoints();
-    reducePoints();
+    insertPoints();
+    // reducePoints();
     // benchLocate();
+    // benchRead();
     return 0;
 }
