@@ -21,14 +21,15 @@ namespace tsdb {
 static const size_t pagesize = getpagesize();
 static const size_t MMAP_SIZE = 1ull << 40; // 1 TiB of addressable memory
 
-typedef uint32_t sent_magic_t;
+typedef uint64_t sent_magic_t;
+const char* MAGIC = "FMAPVEC";
 
 template<typename T>
 class FileMappedVector {
     size_t _size;
     size_t capacity;
 
-    const sent_magic_t sentinel_magic = 0xdeadbeef;
+    const sent_magic_t sentinel_magic = *(sent_magic_t*)MAGIC;
 
     struct sentinel {
         sent_magic_t magic;
