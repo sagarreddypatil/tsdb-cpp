@@ -3,6 +3,8 @@
 #include "database.hpp"
 #include <cstdint>
 #include <chrono>
+#include <thread>
+#include <unistd.h>
 
 #include <fstream>
 
@@ -11,7 +13,7 @@ struct DataPoint {
     int b;
 };
 
-static const size_t npts = 1000000;
+static const size_t npts = 100000;
 
 void insertPoints() {
     std::cout << "Inserting " << npts << " points" << std::endl;
@@ -24,10 +26,14 @@ void insertPoints() {
     for (int i = 0; i < (int)npts; i++) {
         auto time = std::chrono::high_resolution_clock::now();
         uint64_t timestamp = std::chrono::duration_cast<std::chrono::nanoseconds>(time - start).count();
-        assert(timestamp != 0);
         // uint64_t timestamp = i;
 
-        table->append(timestamp, {i * 2, i * 3});
+        table->append(timestamp, {i, i});
+
+        for(volatile int j = 0; j < 500;) {
+            int k = j + 1;
+            j = k;
+        }
     }
 
     db.sync();
@@ -89,7 +95,8 @@ void toCSV() {
     std::ofstream file("data.csv");
     file << "timestamp,a,b\n";
 
-    for (size_t i = 0; i < table->size(); i++) {
+    size_t size = table->size();
+    for (size_t i = 0; i < size; i++) {
         auto entry = table->get(i);
         file << entry->timestamp << "," << entry->value.a << "," << entry->value.b << "\n";
     }

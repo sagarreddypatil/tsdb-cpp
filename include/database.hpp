@@ -189,16 +189,12 @@ private:
             last->sent.used_size = _size;
         }
 
-        if (_size > 0 && new_elem.timestamp <= data[_size - 1].data.timestamp) {
-            return;
-        }
-
         data[_size].data = new_elem;
         _size++;
 
-        if (_size % 997 == 0) {
-            std::cout << "buffer used: " << insertion_buffer.size() << std::endl;
-        }
+        // if (_size % 997 == 0) {
+        //     std::cout << "buffer used: " << insertion_buffer.size() << std::endl;
+        // }
 
         // update sentinel
         elem* last = &data[capacity - 1];
