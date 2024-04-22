@@ -2,20 +2,29 @@
 
 #include "database.hpp"
 #include <cstdint>
+#include <chrono>
+
+#include <fstream>
 
 struct DataPoint {
     int a;
     int b;
 };
 
-static const size_t npts = 100000000;
+static const size_t npts = 10000000;
 
 void insertPoints() {
     tsdb::Database db("db");
     auto table = db.get_table<DataPoint>("mytable");
 
+    const auto start = std::chrono::high_resolution_clock::now();
+
     for (int i = 0; i < (int)npts; i++) {
-        table->append(i, {i * 2, i * 3});
+        auto time = std::chrono::high_resolution_clock::now();
+        uint64_t timestamp = std::chrono::duration_cast<std::chrono::nanoseconds>(time - start).count();
+        // uint64_t timestamp = i;
+
+        table->append(timestamp, {i * 2, i * 3});
     }
 
     db.sync();
@@ -68,8 +77,22 @@ size_t benchRead() {
     return npts;
 }
 
+void toCSV() {
+    tsdb::Database db("db");
+    auto table = db.get_table<DataPoint>("mytable");
+
+    std::ofstream file("data.csv");
+    file << "timestamp,a,b\n";
+
+    for (size_t i = 0; i < npts; i++) {
+        auto entry = table->get(i);
+        file << entry->timestamp << "," << entry->value.a << "," << entry->value.b << "\n";
+    }
+}
+
 int main() {
     insertPoints();
+    // toCSV();
     // reducePoints();
     // benchLocate();
     // benchRead();

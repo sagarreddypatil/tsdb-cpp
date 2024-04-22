@@ -8,6 +8,7 @@ extern "C" {
 #include <string.h>
 #include <fcntl.h>
 #include <stdint.h>
+#include <assert.h>
 }
 
 #include <functional>
@@ -18,16 +19,19 @@ extern "C" {
 namespace tsdb {
 
 static const size_t pagesize = getpagesize();
+static const size_t MMAP_SIZE = 1ull << 40; // 1 TiB of addressable memory
+
+typedef uint32_t sent_magic_t;
 
 template<typename T>
 class FileMappedVector {
     size_t _size;
     size_t capacity;
 
-    const char* sentinel_magic = "FMAPVEC";
+    const sent_magic_t sentinel_magic = 0xdeadbeef;
 
     struct sentinel {
-        char magic[8];
+        sent_magic_t magic;
         size_t used_size;
     };
 
@@ -52,15 +56,33 @@ class FileMappedVector {
         }
 
         // get file size
+        {
+            struct stat st;
+            fstat(fd, &st);
+
+            if(st.st_size == 0) {
+                // initialize file
+                ftruncate(fd, init_size);
+
+                // initialize sentinel
+                elem init_sentinel;
+                init_sentinel.sent.used_size = 0;
+                init_sentinel.sent.magic = sentinel_magic;
+
+                // write sentinel
+                lseek(fd, (init_size - sizeof(elem)), SEEK_SET);
+                write(fd, &init_sentinel, sizeof(elem));
+                lseek(fd, 0, SEEK_SET);
+            }
+        }
+
         struct stat st;
         fstat(fd, &st);
 
-        if(st.st_size == 0) {
-            // initialize file
-            ftruncate(fd, init_size);
-            st.st_size = init_size;
+        if (st.st_size % sizeof(elem) != 0) {
+            std::cerr << "Error: file " << loc << " is invalid" << std::endl;
+            return;
         }
-
         capacity = st.st_size / sizeof(elem);
 
         if (capacity == 0) {
@@ -70,24 +92,26 @@ class FileMappedVector {
         }
 
         // map file to memory
-        data = (elem*)mmap(NULL, capacity * sizeof(elem), PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
+        data = (elem*)mmap(NULL, MMAP_SIZE, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
         if (data == MAP_FAILED) {
             std::cerr << "Error: could not map file " << loc << " to memory" << std::endl;
-            return;
+            exit(1);
         }
+
+        // most of this space doesn't exist, so we advise dontneed
+        // madvise(data, MMAP_SIZE, MADV_DONTNEED);
 
         // last element is a sentinel, check magic
         elem* last = &data[capacity - 1];
-        if(strncmp(last->sent.magic, sentinel_magic, 8) != 0) {
-            // initialize sentinel
-            last->sent.used_size = 0;
-            memcpy(last->sent.magic, sentinel_magic, 8);
+        if (last->sent.magic != sentinel_magic) {
+            std::cerr << "Error: file " << loc << " is invalid" << std::endl;
+            return;
         }
 
         _size = last->sent.used_size;
 
         // advise random
-        madvise(data, _size * sizeof(elem), MADV_RANDOM);
+        // madvise(data, _size * sizeof(elem), MADV_RANDOM);
     };
 
     ~FileMappedVector() {
@@ -99,31 +123,20 @@ class FileMappedVector {
     void append(const T& new_elem) {
         if (_size >= capacity - 1) {
             // resize
-            auto new_capacity = capacity * 2;
+            auto new_capacity = capacity * 2.71;
 
-            // unmap old memory
-            munmap(data, capacity * sizeof(elem));
-
-            // ftrunc
-            ftruncate(fd, new_capacity * sizeof(elem));
-
-            int flags = MAP_SHARED;
-
-            // remap
-            data = (elem*)mmap(NULL, new_capacity * sizeof(elem), PROT_READ | PROT_WRITE, flags, fd, 0);
-            if (data == MAP_FAILED) {
-                std::cerr << "Error: could not remap file to memory" << std::endl;
+            // expand file
+            int ret = ftruncate(fd, new_capacity * sizeof(elem));
+            if (ret == -1) {
+                std::cerr << "Error: could not expand file" << std::endl;
                 return;
             }
-
-            // advise the whole thing as random
-            madvise(data, new_capacity * sizeof(elem), MADV_RANDOM);
 
             capacity = new_capacity;
 
             // update sentinel
             elem* last = &data[capacity - 1];
-            memcpy(last->sent.magic, sentinel_magic, 8);
+            last->sent.magic = sentinel_magic;
             last->sent.used_size = _size;
         }
 
@@ -132,6 +145,7 @@ class FileMappedVector {
 
         // update sentinel
         elem* last = &data[capacity - 1];
+        assert(last->sent.magic == sentinel_magic);
         last->sent.used_size = _size;
     };
 
