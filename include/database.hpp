@@ -123,7 +123,7 @@ class FileMappedVector {
     void append(const T& new_elem) {
         if (_size >= capacity - 1) {
             // resize
-            size_t new_capacity = capacity * 2.71;
+            size_t new_capacity = capacity * 2.71; // for some reason, e has best performance
 
             // expand file
             int ret = ftruncate(fd, new_capacity * sizeof(elem));
