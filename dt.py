@@ -1,13 +1,18 @@
 import pandas as pd
 
+print("Opening data.csv")
+
 df = pd.read_csv('data.csv')
 
 # calculate diff t of "timestamp" column
 df['dt'] = df["timestamp"].diff()
 
 # sort by dt, print out largest dts and indices
-df = df.sort_values(by='dt', ascending=False)
+df = df.sort_values(by='dt', ascending=True)
 
+print(df.head(5))
+
+df = df.sort_values(by='dt', ascending=False)
 print(df.head(5))
 
 # print out general stats of the dt column, 99th and 99.9th percentiles
