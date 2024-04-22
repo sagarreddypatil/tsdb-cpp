@@ -17,7 +17,9 @@ extern "C" {
 #include <filesystem>
 #include <thread>
 #include <mutex>
-#include <semaphore>
+#include <condition_variable>
+// #include <semaphore>
+#include <queue>
 
 namespace tsdb {
 
@@ -27,8 +29,7 @@ static const size_t MMAP_SIZE = 1ull << 40; // 1 TiB of addressable memory
 typedef uint64_t sent_magic_t;
 const char* MAGIC = "FMAPVEC";
 
-
-constexpr int BUF_SIZE = 2 << 15;
+// constexpr int BUF_SIZE = 2 << 15;
 
 template<typename T>
 class FileMappedVector {
@@ -50,13 +51,15 @@ class FileMappedVector {
     int fd;
     elem* data;
 
-    T insertion_buffer[BUF_SIZE];
-    std::counting_semaphore<BUF_SIZE> sem_empty { BUF_SIZE };
-    std::counting_semaphore<BUF_SIZE> sem_full { 0 };
-    std::mutex mtx;
+    // T insertion_buffer[BUF_SIZE];
+    // std::counting_semaphore<BUF_SIZE> sem_empty { BUF_SIZE };
+    // std::counting_semaphore<BUF_SIZE> sem_full { 0 };
+    // size_t head = 0;
+    // size_t tail = 0;
 
-    size_t head = 0;
-    size_t tail = 0;
+    std::queue<T> insertion_buffer;
+    std::condition_variable has_data;
+    std::mutex mtx;
 
     std::thread writer;
     std::atomic<bool> running = true;
@@ -138,6 +141,7 @@ class FileMappedVector {
     ~FileMappedVector() {
         // kill writer thread
         running = false;
+        has_data.notify_one();
         writer.join();
 
         msync(data, capacity * sizeof(elem), MS_SYNC);
@@ -146,31 +150,20 @@ class FileMappedVector {
     };
 
 private:
-    T pop_buffer() {
-        T ret = insertion_buffer[tail++];
-        tail %= BUF_SIZE;
-        return ret;
-    }
-
-    void push_buffer(const T& elem) {
-        insertion_buffer[head++] = elem;
-        head %= BUF_SIZE;
-    }
-
     void writer_task() {
         while (true) {
-            if(!sem_full.try_acquire_for(std::chrono::milliseconds(100))) {
-                if (!running) {
+            T point;
+            {
+                std::unique_lock<std::mutex> lck(mtx);
+                has_data.wait(lck, [this]() { return !running || !insertion_buffer.empty(); });
+
+                if(!running && insertion_buffer.empty()) {
                     break;
                 }
-                continue;
+
+                point = insertion_buffer.front();
+                insertion_buffer.pop();
             }
-            mtx.lock();
-
-            T point = pop_buffer();
-
-            mtx.unlock();
-            sem_empty.release();
 
             _append(point);
         }
@@ -203,6 +196,10 @@ private:
         data[_size].data = new_elem;
         _size++;
 
+        if (_size % 997 == 0) {
+            std::cout << "buffer used: " << insertion_buffer.size() << std::endl;
+        }
+
         // update sentinel
         elem* last = &data[capacity - 1];
         assert(last->sent.magic == sentinel_magic);
@@ -211,13 +208,9 @@ private:
 public:
 
     void append(const T& new_elem) {
-        sem_empty.acquire();
-        mtx.lock();
-
-        push_buffer(new_elem);
-
-        mtx.unlock();
-        sem_full.release();
+        std::unique_lock<std::mutex> lck(mtx);
+        insertion_buffer.push(new_elem);
+        has_data.notify_one();
     }
 
     T* get(size_t i) {

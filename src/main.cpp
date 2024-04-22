@@ -11,7 +11,7 @@ struct DataPoint {
     int b;
 };
 
-static const size_t npts = 100000;
+static const size_t npts = 1000000;
 
 void insertPoints() {
     std::cout << "Inserting " << npts << " points" << std::endl;
