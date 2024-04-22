@@ -40,13 +40,18 @@ for (int i = 0; i < (int)npts; i++) {
                         // I am partial to microseconds since UNIX epoch
     auto x = i * 2;
     auto y = i * 3;
-    
+
     // timestamps must be in strictly increasing order
     // points are dropped WITHOUT WARNING if you insert an invalid timestamp
+
+    // O(1), spike when the file needs to be expanded
+    // file expansion is O(0) ammortized, it's just ftruncate
     table->append(timestamp, {x, y});
 }
 
 auto dt = 10; // 10 time units
+
+// O(log_2(npts))
 auto reduced = table->reduce(0, npts, 10); // sample a point every 10 time units
 
 // get the point closest to timestamp 123, binary search
@@ -56,6 +61,7 @@ auto p = table->locate(123);
 tsdb::Table<DataPoint>::Entry entry;
 for(int i = 0; i < 50; i++) {
     for (size_t i = 0; i < npts; i++) {
+        // O(1)
         entry = *(table->get(i));
     }
 }
@@ -93,5 +99,6 @@ It's really fast, that's basically about it.
 
 There are no dependencies, and there are no cool features. Litearlly
 all it does is mmap a massive file and write to it, expanding the file
-as needed. It is not storage space efficient, the written file can be read
-directly into memory.
+as needed. It is not storage space efficient
+(it's O(n), but there isn't any compression),
+and the written file can be read directly into memory.
