@@ -11,9 +11,11 @@ struct DataPoint {
     int b;
 };
 
-static const size_t npts = 10000000;
+static const size_t npts = 100000;
 
 void insertPoints() {
+    std::cout << "Inserting " << npts << " points" << std::endl;
+
     tsdb::Database db("db");
     auto table = db.get_table<DataPoint>("mytable");
 
@@ -78,6 +80,8 @@ size_t benchRead() {
 }
 
 void toCSV() {
+    std::cout << "Writing to CSV" << std::endl;
+
     tsdb::Database db("db");
     auto table = db.get_table<DataPoint>("mytable");
 
@@ -92,7 +96,7 @@ void toCSV() {
 
 int main() {
     insertPoints();
-    // toCSV();
+    toCSV();
     // reducePoints();
     // benchLocate();
     // benchRead();

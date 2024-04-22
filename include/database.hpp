@@ -80,15 +80,15 @@ class FileMappedVector {
         fstat(fd, &st);
 
         if (st.st_size % sizeof(elem) != 0) {
-            std::cerr << "Error: file " << loc << " is invalid" << std::endl;
-            return;
+            std::cerr << "Error: file " << loc << " is invalid (unaligned size)" << std::endl;
+            exit(1);
         }
         capacity = st.st_size / sizeof(elem);
 
         if (capacity == 0) {
             // invalid file
-            std::cerr << "Error: file " << loc << " is invalid" << std::endl;
-            return;
+            std::cerr << "Error: file " << loc << " is invalid (empty file)" << std::endl;
+            exit(1);
         }
 
         // map file to memory
@@ -104,8 +104,8 @@ class FileMappedVector {
         // last element is a sentinel, check magic
         elem* last = &data[capacity - 1];
         if (last->sent.magic != sentinel_magic) {
-            std::cerr << "Error: file " << loc << " is invalid" << std::endl;
-            return;
+            std::cerr << "Error: file " << loc << " is invalid (invalid magic number)" << std::endl;
+            exit(1);
         }
 
         _size = last->sent.used_size;
@@ -123,7 +123,7 @@ class FileMappedVector {
     void append(const T& new_elem) {
         if (_size >= capacity - 1) {
             // resize
-            auto new_capacity = capacity * 2.71;
+            size_t new_capacity = capacity * 2.71;
 
             // expand file
             int ret = ftruncate(fd, new_capacity * sizeof(elem));
