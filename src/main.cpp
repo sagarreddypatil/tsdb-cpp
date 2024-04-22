@@ -24,6 +24,7 @@ void insertPoints() {
     for (int i = 0; i < (int)npts; i++) {
         auto time = std::chrono::high_resolution_clock::now();
         uint64_t timestamp = std::chrono::duration_cast<std::chrono::nanoseconds>(time - start).count();
+        assert(timestamp != 0);
         // uint64_t timestamp = i;
 
         table->append(timestamp, {i * 2, i * 3});
@@ -88,7 +89,7 @@ void toCSV() {
     std::ofstream file("data.csv");
     file << "timestamp,a,b\n";
 
-    for (size_t i = 0; i < npts; i++) {
+    for (size_t i = 0; i < table->size(); i++) {
         auto entry = table->get(i);
         file << entry->timestamp << "," << entry->value.a << "," << entry->value.b << "\n";
     }

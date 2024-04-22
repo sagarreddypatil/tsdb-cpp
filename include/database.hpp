@@ -15,6 +15,9 @@ extern "C" {
 #include <unordered_map>
 #include <memory>
 #include <filesystem>
+#include <thread>
+#include <mutex>
+#include <semaphore>
 
 namespace tsdb {
 
@@ -23,6 +26,9 @@ static const size_t MMAP_SIZE = 1ull << 40; // 1 TiB of addressable memory
 
 typedef uint64_t sent_magic_t;
 const char* MAGIC = "FMAPVEC";
+
+
+constexpr int BUF_SIZE = 2 << 15;
 
 template<typename T>
 class FileMappedVector {
@@ -43,6 +49,17 @@ class FileMappedVector {
 
     int fd;
     elem* data;
+
+    T insertion_buffer[BUF_SIZE];
+    std::counting_semaphore<BUF_SIZE> sem_empty { BUF_SIZE };
+    std::counting_semaphore<BUF_SIZE> sem_full { 0 };
+    std::mutex mtx;
+
+    size_t head = 0;
+    size_t tail = 0;
+
+    std::thread writer;
+    std::atomic<bool> running = true;
 
     public:
     FileMappedVector(std::string loc) {
@@ -113,15 +130,53 @@ class FileMappedVector {
 
         // advise random
         // madvise(data, _size * sizeof(elem), MADV_RANDOM);
+
+        // start writer thread
+        writer = std::thread(&FileMappedVector::writer_task, this);
     };
 
     ~FileMappedVector() {
+        // kill writer thread
+        running = false;
+        writer.join();
+
         msync(data, capacity * sizeof(elem), MS_SYNC);
         munmap(data, capacity * sizeof(elem));
         close(fd);
     };
 
-    void append(const T& new_elem) {
+private:
+    T pop_buffer() {
+        T ret = insertion_buffer[tail++];
+        tail %= BUF_SIZE;
+        return ret;
+    }
+
+    void push_buffer(const T& elem) {
+        insertion_buffer[head++] = elem;
+        head %= BUF_SIZE;
+    }
+
+    void writer_task() {
+        while (true) {
+            if(!sem_full.try_acquire_for(std::chrono::milliseconds(100))) {
+                if (!running) {
+                    break;
+                }
+                continue;
+            }
+            mtx.lock();
+
+            T point = pop_buffer();
+
+            mtx.unlock();
+            sem_empty.release();
+
+            _append(point);
+        }
+    }
+
+    void _append(const T& new_elem) {
         if (_size >= capacity - 1) {
             // resize
             size_t new_capacity = capacity * 2.71; // for some reason, e has best performance
@@ -141,6 +196,10 @@ class FileMappedVector {
             last->sent.used_size = _size;
         }
 
+        if (_size > 0 && new_elem.timestamp <= data[_size - 1].data.timestamp) {
+            return;
+        }
+
         data[_size].data = new_elem;
         _size++;
 
@@ -149,6 +208,17 @@ class FileMappedVector {
         assert(last->sent.magic == sentinel_magic);
         last->sent.used_size = _size;
     };
+public:
+
+    void append(const T& new_elem) {
+        sem_empty.acquire();
+        mtx.lock();
+
+        push_buffer(new_elem);
+
+        mtx.unlock();
+        sem_full.release();
+    }
 
     T* get(size_t i) {
         // don't bounds check
