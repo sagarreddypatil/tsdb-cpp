@@ -83,9 +83,9 @@ systemd-run --scope -p MemoryMax=100M ./your_program
 
 Tradeoffs for restricting RAM:
 - More frequent disk writes
-- Faster write times
+- Faster write times (sometimes, slow if the RAM is too low)
 - Possibly slower reads
-- **Significantly higher disk fragmentation**
+- Slightly higher disk fragmentation
 
 It's probably worth it just for the more frequent writes
 if the possibility of the server crashing is a concern.
