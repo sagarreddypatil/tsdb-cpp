@@ -28,7 +28,7 @@ typedef uint64_t sent_magic_t;
 const char* MAGIC = "FMAPVEC";
 
 
-constexpr int BUF_SIZE = 8192;
+constexpr int BUF_SIZE = 2 << 15;
 
 template<typename T>
 class FileMappedVector {
@@ -158,7 +158,7 @@ private:
     }
 
     void writer_task() {
-        while (running) {
+        while (true) {
             if(!sem_full.try_acquire_for(std::chrono::milliseconds(100))) {
                 if (!running) {
                     break;
