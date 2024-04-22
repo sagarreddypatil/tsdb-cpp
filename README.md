@@ -61,6 +61,32 @@ for(int i = 0; i < 50; i++) {
 }
 ```
 
+## Restricting RAM
+
+The database will use as much RAM as it can, or as much as the Linux kernel
+decides to keep resident. This might not be ideal.
+
+On Linux systems running systemd, you can use this command to restrict the
+amount of RAM the database can use:
+
+```sh
+systemd-run --scope -p MemoryMax=100M ./your_program
+```
+
+100M is a decent number, adjust as needed.
+
+Tradeoffs for restricting RAM:
+- More frequent disk writes
+- Faster write times
+- Possibly slower reads
+- **Significantly higher disk fragmentation**
+
+It's probably worth it just for the more frequent writes
+if the possibility of the server crashing is a concern.
+
+It works well down to even 10M of RAM, but the disk fragmentation
+is probably very high. I have not measured this.
+
 ## Why should you use it?
 
 It's really fast, that's basically about it.
