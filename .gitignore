@@ -3,3 +3,5 @@ db/
 *.dat
 perf.*
 data.csv
+*.fxt
+*.fxt.old

@@ -15,26 +15,32 @@ struct DataPoint {
 
 static const size_t npts = 10000;
 
-void insertPoints() {
-    std::cout << "Inserting " << npts << " points" << std::endl;
+volatile int counter = 0;
 
+void insertPoints() {
     tsdb::Database db("db");
     auto table = db.get_table<DataPoint>("mytable");
 
     const auto start = std::chrono::high_resolution_clock::now();
+
+    // wait until user presses enter
+    std::cout << "Press enter to start inserting points" << std::endl;
+    std::cin.get();
 
     for (int i = 0; i < (int)npts; i++) {
         auto time = std::chrono::high_resolution_clock::now();
         uint64_t timestamp = std::chrono::duration_cast<std::chrono::nanoseconds>(time - start).count();
         // uint64_t timestamp = i;
 
-        table->append(timestamp, {i, i});
+        table->append(timestamp, {i * 2, i * 3});
 
-        for(volatile int j = 0; j < 3500;) {
-            int k = j + 1;
-            j = k;
-        }
+        // for(volatile int j = 0; j < 4500;) {
+        //     int k = j + 1;
+        //     j = k;
+        // }
     }
+    // exit(0);
+    std::cout << "Inserted " << npts << " points" << std::endl;
 
     db.sync();
 }
@@ -103,6 +109,9 @@ void toCSV() {
 }
 
 int main() {
+    // print my pid
+    std::cout << "PID: " << getpid() << std::endl;
+
     insertPoints();
     toCSV();
     // reducePoints();
