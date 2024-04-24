@@ -24,9 +24,8 @@ void insertPoints() {
     const auto start = std::chrono::high_resolution_clock::now();
 
     // wait until user presses enter
-    std::cout << "Press enter to start inserting points" << std::endl;
-    std::cin.get();
-
+    // std::cout << "Press enter to start inserting points" << std::endl;
+    // std::cin.get();
     for (int i = 0; i < (int)npts; i++) {
         auto time = std::chrono::high_resolution_clock::now();
         uint64_t timestamp = std::chrono::duration_cast<std::chrono::nanoseconds>(time - start).count();
