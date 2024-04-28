@@ -42,6 +42,7 @@ class FileMappedVector {
     };
 
     int fd;
+    elem* sentinel;
     elem* data;
 
     public:
@@ -53,7 +54,7 @@ class FileMappedVector {
 
         if (fd == -1) {
             std::cerr << "Error: could not open file " << loc << std::endl;
-            return;
+            exit(1);
         }
 
         // get file size
@@ -71,9 +72,8 @@ class FileMappedVector {
                 init_sentinel.sent.magic = sentinel_magic;
 
                 // write sentinel
-                lseek(fd, (init_size - sizeof(elem)), SEEK_SET);
-                write(fd, &init_sentinel, sizeof(elem));
                 lseek(fd, 0, SEEK_SET);
+                write(fd, &init_sentinel, sizeof(elem));
             }
         }
 
@@ -93,61 +93,69 @@ class FileMappedVector {
         }
 
         // map file to memory
-        data = (elem*)mmap(NULL, MMAP_SIZE, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
-        if (data == MAP_FAILED) {
+        sentinel = (elem*)mmap(NULL, MMAP_SIZE, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
+        if (sentinel == MAP_FAILED) {
             std::cerr << "Error: could not map file " << loc << " to memory" << std::endl;
             exit(1);
         }
 
         // most of this space doesn't exist, so we advise dontneed
-        // madvise(data, MMAP_SIZE, MADV_DONTNEED);
+        madvise(sentinel, MMAP_SIZE, MADV_DONTNEED);
 
-        // last element is a sentinel, check magic
-        elem* last = &data[capacity - 1];
-        if (last->sent.magic != sentinel_magic) {
+        data = sentinel + 1;
+
+        // first element is a sentinel, check magic
+        if (sentinel->sent.magic != sentinel_magic) {
             std::cerr << "Error: file " << loc << " is invalid (invalid magic number)" << std::endl;
             exit(1);
         }
 
-        _size = last->sent.used_size;
+        madvise(data, capacity * sizeof(elem), MADV_SEQUENTIAL);
+        madvise(sentinel, sizeof(elem), MADV_WILLNEED);
 
-        // advise random
-        // madvise(data, _size * sizeof(elem), MADV_RANDOM);
+        _size = sentinel->sent.used_size;
     };
 
     ~FileMappedVector() {
-        msync(data, capacity * sizeof(elem), MS_SYNC);
-        munmap(data, capacity * sizeof(elem));
+        int ret = msync(sentinel, capacity * sizeof(elem), MS_SYNC);
+        if (ret == -1) {
+            std::cerr << "Error: destructor msync error" << std::endl;
+        }
+        ret = munmap(sentinel, MMAP_SIZE);
+        if (ret == -1) {
+            std::cerr << "Error: munmap error" << std::endl;
+        }
         close(fd);
     };
 
     void append(const T& new_elem) {
         if (_size >= capacity - 1) {
             // resize
-            size_t new_capacity = capacity * 2.71; // for some reason, e has best performance
+            const size_t new_capacity = capacity * 2.0; // for some reason, e has best performance
+            const size_t inc = new_capacity * sizeof(elem) - capacity * sizeof(elem);
 
             // expand file
-            int ret = ftruncate(fd, new_capacity * sizeof(elem));
+            int ret = fallocate(fd, 0, capacity * sizeof(elem), inc);
             if (ret == -1) {
                 std::cerr << "Error: could not expand file" << std::endl;
                 return;
             }
 
-            capacity = new_capacity;
+            // change madvise for old segment to random
+            // new segment to sequential
+            madvise(data, capacity * sizeof(elem), MADV_RANDOM);
+            madvise(data + capacity, inc * sizeof(elem), MADV_SEQUENTIAL);
+            madvise(sentinel, sizeof(elem), MADV_WILLNEED);
 
-            // update sentinel
-            elem* last = &data[capacity - 1];
-            last->sent.magic = sentinel_magic;
-            last->sent.used_size = _size;
+            capacity = new_capacity;
         }
 
         data[_size].data = new_elem;
         _size++;
 
         // update sentinel
-        elem* last = &data[capacity - 1];
-        assert(last->sent.magic == sentinel_magic);
-        last->sent.used_size = _size;
+        assert(sentinel->sent.magic == sentinel_magic);
+        sentinel->sent.used_size = _size;
     };
 
     T* get(size_t i) {
