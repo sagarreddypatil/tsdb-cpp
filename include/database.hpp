@@ -9,6 +9,7 @@ extern "C" {
 #include <fcntl.h>
 #include <stdint.h>
 #include <assert.h>
+#include "fmapvec.h"
 }
 
 #include <functional>
@@ -18,163 +19,36 @@ extern "C" {
 
 namespace tsdb {
 
-static const size_t pagesize = getpagesize();
-static const size_t MMAP_SIZE = 1ull << 40; // 1 TiB of addressable memory
-
-typedef uint64_t sent_magic_t;
-const char* MAGIC = "FMAPVEC";
-
 template<typename T>
 class FileMappedVector {
-    size_t _size;
-    size_t capacity;
+    fmapvec_t vec;
 
-    const sent_magic_t sentinel_magic = *(sent_magic_t*)MAGIC;
-
-    struct sentinel {
-        sent_magic_t magic;
-        size_t used_size;
-    };
-
-    union elem {
-        T data;
-        sentinel sent;
-    };
-
-    int fd;
-    elem* sentinel;
-    elem* data;
-
-    public:
+public:
     FileMappedVector(std::string loc) {
-        size_t init_size = sizeof(elem) * 32;
-
-        // create file if it doesn't exist
-        fd = open(loc.c_str(), O_RDWR | O_CREAT, 0644);
-
+        int fd = open(loc.c_str(), O_RDWR | O_CREAT, 0600);
         if (fd == -1) {
-            std::cerr << "Error: could not open file " << loc << std::endl;
+            perror("open");
             exit(1);
         }
 
-        // get file size
-        {
-            struct stat st;
-            fstat(fd, &st);
-
-            if(st.st_size == 0) {
-                // initialize file
-                ftruncate(fd, init_size);
-
-                // initialize sentinel
-                elem init_sentinel;
-                init_sentinel.sent.used_size = 0;
-                init_sentinel.sent.magic = sentinel_magic;
-
-                // write sentinel
-                lseek(fd, 0, SEEK_SET);
-                write(fd, &init_sentinel, sizeof(elem));
-            }
-        }
-
-        struct stat st;
-        fstat(fd, &st);
-
-        if (st.st_size % sizeof(elem) != 0) {
-            std::cerr << "Error: file " << loc << " is invalid (unaligned size)" << std::endl;
-            exit(1);
-        }
-        capacity = st.st_size / sizeof(elem);
-
-        if (capacity == 0) {
-            // invalid file
-            std::cerr << "Error: file " << loc << " is invalid (empty file)" << std::endl;
-            exit(1);
-        }
-
-        // map file to memory
-        sentinel = (elem*)mmap(NULL, MMAP_SIZE, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
-        if (sentinel == MAP_FAILED) {
-            std::cerr << "Error: could not map file " << loc << " to memory" << std::endl;
-            exit(1);
-        }
-
-        // most of this space doesn't exist, so we advise dontneed
-        madvise(sentinel, MMAP_SIZE, MADV_DONTNEED);
-
-        data = sentinel + 1;
-
-        // first element is a sentinel, check magic
-        if (sentinel->sent.magic != sentinel_magic) {
-            std::cerr << "Error: file " << loc << " is invalid (invalid magic number)" << std::endl;
-            exit(1);
-        }
-
-        madvise(data, capacity * sizeof(elem), MADV_SEQUENTIAL);
-        madvise(sentinel, sizeof(elem), MADV_WILLNEED);
-
-        _size = sentinel->sent.used_size;
-    };
-
-    ~FileMappedVector() {
-        int ret = msync(sentinel, capacity * sizeof(elem), MS_SYNC);
-        if (ret == -1) {
-            std::cerr << "Error: destructor msync error" << std::endl;
-        }
-        ret = munmap(sentinel, MMAP_SIZE);
-        if (ret == -1) {
-            std::cerr << "Error: munmap error" << std::endl;
-        }
-        close(fd);
-    };
-
-    void append(const T& new_elem) {
-        if (_size >= capacity - 1) {
-            // resize
-            const size_t new_capacity = capacity * 2.0; // for some reason, e has best performance
-            const size_t inc = new_capacity * sizeof(elem) - capacity * sizeof(elem);
-
-            // expand file
-            int ret = fallocate(fd, 0, capacity * sizeof(elem), inc);
-            if (ret == -1) {
-                std::cerr << "Error: could not expand file" << std::endl;
-                return;
-            }
-
-            // change madvise for old segment to random
-            // new segment to sequential
-            madvise(data, capacity * sizeof(elem), MADV_RANDOM);
-            madvise(data + capacity, inc * sizeof(elem), MADV_SEQUENTIAL);
-            madvise(sentinel, sizeof(elem), MADV_WILLNEED);
-
-            capacity = new_capacity;
-        }
-
-        data[_size].data = new_elem;
-        _size++;
-
-        // update sentinel
-        assert(sentinel->sent.magic == sentinel_magic);
-        sentinel->sent.used_size = _size;
-    };
-
-    T* get(size_t i) {
-        // don't bounds check
-        // return &data[i].data;
-        return (T*)(data + i);
+        fmapvec_init(&vec, fd, sizeof(T));
     }
 
-    T operator[](size_t i) {
-        return data[i].data;
-    };
+    void append(const T& elem) {
+        fmapvec_append(&vec, &elem);
+    }
+
+    T* get(size_t idx) {
+        return (T*)fmapvec_get(&vec, idx * sizeof(T));
+    }
 
     size_t size() {
-        return _size;
-    };
+        return fmapvec_size(&vec);
+    }
 
     void sync() {
-        msync(data, capacity * sizeof(elem), MS_ASYNC);
-    };
+        fmapvec_sync(&vec);
+    }
 };
 
 class AbstractTable {
@@ -246,7 +120,7 @@ public:
         end = std::min(end, size());
 
         std::vector<Entry> reduced;
-        reduced.push_back(data->operator[](start));
+        reduced.push_back(*data->get(start));
 
         uint64_t threshold = reduced.back().timestamp + dt;
 

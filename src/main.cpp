@@ -13,7 +13,7 @@ struct DataPoint {
     int b;
 };
 
-static const size_t npts = 10000;
+static const size_t npts = 100000;
 
 volatile int counter = 0;
 

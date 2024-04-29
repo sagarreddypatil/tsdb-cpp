@@ -16,7 +16,7 @@ df = df.sort_values(by='dt', ascending=True)
 print(df.head(5))
 
 df = df.sort_values(by='dt', ascending=False)
-print(df.head(5))
+print(df.head(10))
 
 # print out general stats of the dt column, 99th and 99.9th percentiles
 print(df['dt'].quantile([0.99, 0.999, 0.9999]))
